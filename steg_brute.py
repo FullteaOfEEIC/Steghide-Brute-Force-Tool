@@ -5,6 +5,7 @@ from tqdm.auto import tqdm
 from argparse import ArgumentParser
 import subprocess
 import os
+from multiprocessing import Pool
 
 
 class color:
@@ -43,26 +44,36 @@ Command line examples:
     """
 
 
-def Steg_brute(ifile, dicc):
-    ofile = ifile.split('.')[0] + "_flag.txt"
-    nlines = len(open(dicc).readlines())
-    with open(dicc, 'r') as passFile:
-        for line in tqdm(passFile.readlines()):
-            password = line.strip('\n')
-            r = subprocess.run(["steghide", "extract", "-sf" ,ifile, "-p", '{0}'.format(passwrod), "-xf", ofile])
-            if not "no pude extraer" in r and not "could not extract" in r:
-                print(color.GREEN + "\n\n " + r + color.ENDC)
-                print("\n\n [+] " + color.INFO + "Information obtained with password:" + color.GREEN + " %s\n" % password + color.ENDC)
-                if check_file(ofile):
-                    with open(ofile, 'r') as outfile:
-                        for line in outfile.readlines():
-                            print(line)
-                break
+def _Steg_brute(d):
+    ifile = d[0]
+    password = d[1]
+    ofile = d[2]
+    r = subprocess.run(["steghide", "extract", "-sf", ifile, "-p", "'{0}'".format(
+        password), "-xf", ofile], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    r = str(r.stdout) + str(r.stderr)
+    if not "no pude extraer" in r and not "could not extract" in r:
+        print(color.GREEN + "\n\n " + r + color.ENDC)
+        print("\n\n [+] " + color.INFO + "Information obtained with password:" +
+              color.GREEN + " %s\n" % password + color.ENDC)
+        if check_file(ofile):
+            with open(ofile, 'r') as outfile:
+                for line in outfile.readlines():
+                    print(line)
 
+
+def Steg_brute(ifile, dicc):
+    print(dicc)
+    ofile = ifile.split('.')[0] + "_flag.txt"
+    nlines = len(open(dicc, "r").readlines())
+    with open(dicc, 'r') as passFile:
+        with Pool() as p:
+            imap = p.imap(_Steg_brute,[(ifile,password.strip(),ofile) for password in passFile])
+            list(tqdm(imap, total=nlines))
 
 def steghide(ifile, passwd):
     ofile = ifile.split('.')[0] + "_flag.txt"
-    r = subprocess.run(["steghide", "extract", "-sf", ifile, "-p", '{0}'.format(passwd), "-xf", ofile])
+    r = subprocess.run(["steghide", "extract", "-sf", ifile,
+                        "-p", '{0}'.format(passwd), "-xf", ofile])
     if not "no pude extraer" in r and not "could not extract" in r:
         print(color.GREEN + "\n\n " + r + color.ENDC)
         print("\n [+] " + color.INFO + "Information obtained: \n" + color.ENDC)
@@ -76,9 +87,9 @@ def steghide(ifile, passwd):
 
 def main():
     argp = ArgumentParser(
-            description="Steghide Brute Force Tool",
-            usage="./steg_brute.py [options] [-f image_file]"
-            )
+        description="Steghide Brute Force Tool",
+        usage="./steg_brute.py [options] [-f image_file]"
+    )
 
     argp.add_argument('-i', '--info', dest='info', action='store_true',
                       help='Get info of file')
@@ -99,7 +110,7 @@ def main():
                       help='Path of dictionary to brute force attack')
 
     args = argp.parse_args()
-    #print vars(args)
+    # print vars(args)
 
     if args.info and not args.extract and not args.brute:
         subprocess.run(["steghide", "info", args.file])
